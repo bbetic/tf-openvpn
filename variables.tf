@@ -37,3 +37,11 @@ variable "egress_ports" {
   description = "list of egress ports"
   default     = [80, 443]
 }
+
+variable "ACCESS_ID" {
+  type = string
+}
+
+variable "SECRETY_KEY" {
+  type = string
+}
