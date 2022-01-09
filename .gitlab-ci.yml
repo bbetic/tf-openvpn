@@ -6,7 +6,7 @@
 # See https://docs.gitlab.com/ee/ci/variables/#cicd-variable-precedence
 include:
 - template: Terraform/Base.gitlab-ci.yml
-- template: Security/Secret-Detection.gitlab-ci.yml
+#- template: Security/Secret-Detection.gitlab-ci.yml
 variables:
   TF_ADDRESS: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/terraform/state/${CI_COMMIT_BRANCH}"
 stages:
