@@ -25,7 +25,7 @@ resource "aws_security_group" "openvpn_sg" {
     protocol    = "tcp"
     cidr_blocks = formatlist("%s/32", var.as_config.VPN_SERVER_DHCP_OPTION_DNS)
   }
-    egress {
+  egress {
     from_port   = 53
     to_port     = 53
     protocol    = "udp"
