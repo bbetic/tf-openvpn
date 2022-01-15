@@ -32,6 +32,11 @@ variable "as_config" {
   }
 }
 
+variable "email" {
+  type        = string
+  description = "email address to send login information to"
+}
+
 variable "egress_ports" {
   type        = list(number)
   description = "list of egress ports"

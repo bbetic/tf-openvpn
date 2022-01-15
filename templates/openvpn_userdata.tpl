@@ -23,9 +23,8 @@ cd /usr/local/openvpn_as/scripts
 %{ endif }
 %{ if config.NEW_USER != null } 
 ./sacli --user ${config.NEW_USER} --key "type" --value "user_connect" UserPropPut
-%{ if config.NEW_USER_PASSWORD != null }
-    ./sacli --user ${config.NEW_USER} --new_pass ${config.NEW_USER_PASSWORD} SetLocalPassword
-%{ endif }
+PW=$(python -c 'import random; lines=open("/usr/share/dict/words").readlines() ; print (" ".join([random.choice(lines).strip() for _ in range(2)]).lower())')
+./sacli --user ${config.NEW_USER} --new_pass "$PW" SetLocalPassword
 %{ endif }
 %{ if config.NEW_GROUP != null } 
 ./sacli --user ${config.NEW_GROUP} --key "type" --value "group" UserPropPut
@@ -97,5 +96,11 @@ cd /usr/local/openvpn_as/scripts
 # https://openvpn.net/vpn-server-resources/authentication-options-and-command-line-Configuration/
 
 ./sacli start
+
+aws sns publish \
+    --region $(curl http://169.254.169.254/latest/dynamic/instance-identity/document | python -c 'import json,sys;print json.load(sys.stdin)["region"]') \
+    --topic-arn "${snsarn}" \
+    --message "IP: $(./sacli IP | tr -d ':' ) Password: \"$PW\""
+
 
 yum -y update
