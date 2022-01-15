@@ -1,9 +1,3 @@
-data "aws_region" "default" {}
-data "aws_caller_identity" "default" {}
-
-
-
-
 data "aws_ami" "amazon-linux-2" {
   most_recent = true
   owners      = ["amazon"]

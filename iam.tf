@@ -21,7 +21,7 @@ data "aws_iam_policy_document" "ec2_sns_fullaccess" {
 }
 resource "aws_iam_role_policy" "sns_policy" {
   name = "sns_policy"
-  role = "${aws_iam_role.ec2_sns.id}"
+  role = aws_iam_role.ec2_sns.id
 
   policy = data.aws_iam_policy_document.ec2_sns_fullaccess.json
 }
