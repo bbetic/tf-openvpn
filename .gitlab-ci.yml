@@ -21,7 +21,7 @@ validate:
   extends: ".validate"
 build:
   before_script:
-    - cat $AS_CONFIG > ${TF_ROOT}/terraform.tfvars.json
+    - cat $AS_CONFIG > ${TF_ROOT}/terraform.tfvars
   extends: ".build"
 deploy:
   extends: ".deploy"
