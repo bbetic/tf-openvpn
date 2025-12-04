@@ -1,0 +1,129 @@
+name: OpenVPN JIT Manager
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Action to perform (up, down, status)'
+        required: true
+        default: 'up'
+        type: choice
+        options:
+          - up
+          - down
+          - status
+
+permissions:
+  contents: write
+
+jobs:
+  vpn-manager:
+    runs-on: ubuntu-latest
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: us-east-1
+      PULUMI_CONFIG_PASSPHRASE: ${{ secrets.PULUMI_CONFIG_PASSPHRASE }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      RELEASE_TAG: vpn-active
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install Pulumi CLI
+        uses: pulumi/actions@v4
+        with:
+          pulumi-version: 'latest'
+
+      # --- UP CHECKS ---
+      - name: Check for Existing VPN (Up)
+        if: inputs.action == 'up'
+        run: |
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Error: A VPN session is already active (Release '$RELEASE_TAG' exists)."
+            echo "Please run 'down' to destroy the existing session before starting a new one."
+            exit 1
+          fi
+
+      # --- STATE RESTORATION (Down / Status) ---
+      - name: Download State from Release
+        if: inputs.action == 'down' || inputs.action == 'status'
+        run: |
+          if ! gh release download "$RELEASE_TAG" -p "stack.json"; then
+             if [ "${{ inputs.action }}" == "down" ]; then
+                echo "Error: No active VPN session found (Release '$RELEASE_TAG' not found)."
+                exit 1
+             else
+                echo "No active session found."
+                # Create empty stack.json to allow status to run and report "not running"
+                echo "{}" > stack.json
+             fi
+          fi
+
+      - name: Import State
+        if: (inputs.action == 'down' || inputs.action == 'status') && hashFiles('stack.json') != ''
+        run: |
+          pulumi login --local
+          mkdir -p venv
+          pulumi stack init dev
+          # Only import if stack.json is valid JSON and not empty
+          if [ -s stack.json ] && [ "$(cat stack.json)" != "{}" ]; then
+              pulumi stack import --file stack.json --stack dev
+          fi
+
+      # --- MAIN EXECUTION ---
+      - name: Run VPN Manager
+        run: ./manage.sh ${{ inputs.action }}
+
+      # --- UP FINALIZATION ---
+      # We export state even if the previous step failed, to catch partial deployments
+      - name: Export State (Up)
+        if: inputs.action == 'up' && always()
+        run: |
+           # Only run if Pulumi initialized
+           if [ -d ".pulumi" ] || [ -f "Pulumi.yaml" ]; then
+              pulumi stack export --stack dev --file stack.json || echo "Export failed or stack empty"
+           fi
+
+      - name: Publish State to Release (Up)
+        if: inputs.action == 'up' && always()
+        run: |
+          # Only publish if we successfully exported a non-empty stack
+          if [ -s stack.json ]; then
+              # If manage.sh failed, use a different note
+              NOTES="Active VPN Session."
+              if [ "${{ job.status }}" != "success" ]; then
+                  NOTES="Active VPN Session (Partial/Failed Deployment). Use 'down' to clean up."
+              fi
+
+              gh release create "$RELEASE_TAG" \
+                --title "Active VPN Session" \
+                --notes "$NOTES" \
+                --target ${{ github.sha }} \
+                stack.json client.ovpn || echo "Release creation failed"
+          fi
+
+      # --- DOWN FINALIZATION ---
+      - name: Cleanup Release (Down)
+        if: inputs.action == 'down' && always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+             gh release delete "$RELEASE_TAG" --yes --cleanup-tag || true
+          else
+             echo "Job failed, preserving state release for manual recovery."
+          fi
+
+      # --- ARTIFACTS (Optional Backup) ---
+      - name: Upload Configuration Artifacts
+        if: inputs.action == 'up' && success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpn-config
+          path: client.ovpn
+          retention-days: 1
